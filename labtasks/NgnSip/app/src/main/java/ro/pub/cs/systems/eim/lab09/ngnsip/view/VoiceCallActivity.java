@@ -11,6 +11,9 @@ import android.widget.EditText;
 import android.widget.TextView;
 
 import org.doubango.ngn.NgnEngine;
+import org.doubango.ngn.events.NgnInviteEventArgs;
+import org.doubango.ngn.events.NgnRegistrationEventArgs;
+import org.doubango.ngn.media.NgnMediaType;
 import org.doubango.ngn.services.INgnConfigurationService;
 import org.doubango.ngn.services.INgnSipService;
 import org.doubango.ngn.sip.NgnAVSession;
@@ -64,19 +67,26 @@ public class VoiceCallActivity extends AppCompatActivity {
             // - set the NGN engine parameters via the configureStack() method
             // - start the NGN engine and register the activity to the SIP service
             // invoke the startNgnEngine() and registerSipService() methods respectively
-        }
+
+            configureStack();
+            if (!startNgnEngine()) {
+                return;
+            }
+            registerSipService();
+
+            }
 
     }
 
     private UnregisterButtonClickListener unregisterButtonClickListener = new UnregisterButtonClickListener();
     private class UnregisterButtonClickListener implements Button.OnClickListener {
+        // TODO exercise 5b
+        // unregister the SIP service by invoking the unregisterSipService() method
 
         @Override
         public void onClick(View view) {
-            // TODO exercise 5b
-            // unregister the SIP service by invoking the unregisterSipService() method
-        }
-
+                unregisterSipService();
+            }
     }
 
     private MakeCallButtonClickListener makeCallButtonClickListener = new MakeCallButtonClickListener();
@@ -100,6 +110,16 @@ public class VoiceCallActivity extends AppCompatActivity {
             // - if the call can be made, set the callStatusTextView to "calling" and log the information
             // - if the call cannot be made, log the information accordingly
             // hint: use the makeCall() method of the NgnAVSession instance
+            ngnAVSession = NgnAVSession.createOutgoingSession(
+                    NgnEngine.getInstance().getSipService().getSipStack(),
+                    NgnMediaType.Audio
+            );
+            if (ngnAVSession.makeCall(validUri)) {
+                callStatusTextView.setText(getResources().getString(R.string.calling));
+                Log.d(Constants.TAG, "Call succeeded");
+            } else {
+                Log.d(Constants.TAG, "Call failed");
+            }
 
         }
     }
@@ -108,12 +128,15 @@ public class VoiceCallActivity extends AppCompatActivity {
     private class HangupCallButtonClickListener implements Button.OnClickListener {
 
         @Override
-        public void onClick(View viw) {
 
+        public void onClick(View view) {
             // TODO exercise 7b
             // this method should check whether the NgnAVSession was previously created
             // hint: use the hangUpCall() method of the NgnAVSession instance
-
+            if (ngnAVSession != null) {
+                ngnAVSession.hangUpCall();
+                Log.d(Constants.TAG, "Hang Up");
+            }
         }
 
     }
@@ -234,35 +257,46 @@ public class VoiceCallActivity extends AppCompatActivity {
         }
     }
 
-    public void enableRegistrationBroadcastReceiver() {
 
+    public void enableRegistrationBroadcastReceiver() {
         // TODO exercise 6a
         // - create a RegistrationBroadcastReceiver instance
         // - create an IntentFilter instance for NgnRegistrationEventArgs.ACTION_REGISTRATION_EVENT action
         // - register the broadcast intent with the intent filter
-
+        registrationBroadcastReceiver = new RegistrationBroadcastReceiver(registrationStatusTextView);
+        registrationIntentFilter = new IntentFilter();
+        registrationIntentFilter.addAction(NgnRegistrationEventArgs.ACTION_REGISTRATION_EVENT);
+        registerReceiver(registrationBroadcastReceiver, registrationIntentFilter);
     }
 
-    public void disableRegistrationStateBroadcastReceiver() {
-
+    public void disableRegistrationBroadcastReceiver() {
         // TODO exercise 6b
         // unregister the RegistrationBroadcastReceiver instance
-
+        if (registrationBroadcastReceiver != null) {
+            unregisterReceiver(registrationBroadcastReceiver);
+            registrationBroadcastReceiver = null;
+        }
     }
 
     public void enableVoiceCallBroadcastReceiver() {
-
         // TODO exercise 8a
         // - create a VoiceCallBroadcastReceiver instance
         // - create an IntentFilter instance for NgnInviteEventArgs.ACTION_INVITE_EVENT action
         // - register the broadcast receiver with the intent filter
-
+        voiceCallBroadcastReceiver = new VoiceCallBroadcastReceiver(SIPAddressEditText, callStatusTextView);
+        voiceCallIntentFilter = new IntentFilter();
+        voiceCallIntentFilter.addAction(NgnInviteEventArgs.ACTION_INVITE_EVENT);
+        registerReceiver(voiceCallBroadcastReceiver, voiceCallIntentFilter);
     }
 
     public void disableVoiceCallBroadcastReceiver() {
 
         // TODO exercise 8b
         // unregister the VoiceCallBroadcastReceiver instance
+        if (voiceCallBroadcastReceiver != null) {
+            unregisterReceiver(voiceCallBroadcastReceiver);
+            voiceCallBroadcastReceiver = null;
+        }
 
     }
 
@@ -282,7 +316,7 @@ public class VoiceCallActivity extends AppCompatActivity {
     protected void onDestroy() {
         Log.i(Constants.TAG, "onDestroy() callback method was invoked");
         stopNgnEngine();
-        disableRegistrationStateBroadcastReceiver();
+        disableRegistrationBroadcastReceiver();
         disableVoiceCallBroadcastReceiver();
         super.onDestroy();
     }
